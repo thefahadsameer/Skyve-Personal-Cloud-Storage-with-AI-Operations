@@ -1,24 +1,24 @@
+const path = require('path');
 const express = require('express');
-const app = express();
+const cors = require('cors');
 const dotenv = require('dotenv');
-const connectDB = require('./db/connectDB');
-const fileRoutes = require('./routes/fileRoutes');
-require('dotenv').config();
 
 dotenv.config();
-connectDB();
+require('./db'); // connect API server to Mongo
 
+const app = express();
 app.use(express.json());
-app.use('/uploads', express.static('uploads')); // Serve uploaded files
+app.use(cors({ origin: '*' })); // adjust origin for your React app
 
-// Routes
+// serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// health
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// routes
 const uploadRoutes = require('./routes/upload');
 app.use('/api', uploadRoutes);
 
-// Mount file routes
-app.use('/api', fileRoutes);
-
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

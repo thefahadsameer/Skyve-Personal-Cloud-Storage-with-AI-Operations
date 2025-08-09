@@ -1,70 +1,47 @@
-const fs = require("fs").promises;
-const path = require("path");
-const { Worker } = require("bullmq");
-const { connection } = require("../config/queue");
-const File = require('../models/fileModel');
-const { Configuration, OpenAIApi } = require("openai");
+const { aiQueue } = require('../queues/aiQueue');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const File = require('../models/File'); // your file model
 
-// Load OpenAI API key
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+dotenv.config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/skyve', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => {
+    console.log('MongoDB connected in worker');
+}).catch(err => {
+    console.error('MongoDB connection error in worker:', err);
 });
-const openai = new OpenAIApi(configuration);
 
-// Define AI Worker
-const aiWorker = new Worker(
-  "aiTasks",
-  async (job) => {
-    console.log("Processing job:", job.id, job.data);
-
-    const { fileId, filePath, mimeType } = job.data;
-
+// Process AI jobs
+aiQueue.process(async (job) => {
     try {
-      // Only process plain text files for now
-      if (!mimeType.includes("text")) {
-        console.log("Skipping non-text file:", mimeType);
-        return;
-      }
+        console.log('Processing AI job:', job.id, job.data);
 
-      // Read file content
-      const absolutePath = path.resolve(filePath);
-      const content = await fs.readFile(absolutePath, "utf-8");
+        const fileId = job.data.fileId;
+        const fileDoc = await File.findById(fileId);
+        if (!fileDoc) {
+            throw new Error('File not found in DB');
+        }
 
-      // Summarize using OpenAI
-      const response = await openai.createChatCompletion({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "Summarize the following user-uploaded text file.",
-          },
-          {
-            role: "user",
-            content,
-          },
-        ],
-      });
+        // Simulate AI processing
+        console.log(`Analyzing file: ${fileDoc.fileName}`);
 
-      const summary = response.data.choices[0].message.content;
+        // Example: Add AI tags or summary
+        const aiTags = ['example-tag', 'another-tag']; // replace with AI logic
+        const aiSummary = `This is a sample AI-generated summary for ${fileDoc.fileName}`;
 
-      // Save summary in DB
-      await File.findByIdAndUpdate(fileId, {
-        ai_tags: ["summary"],
-        ai_summary: summary,
-      });
+        fileDoc.ai_tags = aiTags;
+        fileDoc.ai_summary = aiSummary;
+        await fileDoc.save();
 
-      console.log("✅ Summary saved to DB for file:", fileId);
+        console.log(`AI analysis complete for file: ${fileDoc.fileName}`);
+        return { status: 'done', fileId };
+
     } catch (err) {
-      console.error("❌ Error processing job:", err);
+        console.error('AI Worker error:', err);
+        throw err;
     }
-  },
-  { connection }
-);
-
-// Worker events
-aiWorker.on("completed", (job) => {
-  console.log(`✅ Job ${job.id} completed`);
-});
-aiWorker.on("failed", (job, err) => {
-  console.error(`❌ Job ${job.id} failed`, err);
 });

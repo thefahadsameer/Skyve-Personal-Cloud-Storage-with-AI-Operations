@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bull": "^4.16.5",
     "bullmq": "^5.56.9",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
